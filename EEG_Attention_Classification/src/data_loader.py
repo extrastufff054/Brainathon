@@ -1,13 +1,20 @@
 import os
 import pandas as pd
+import numpy as np
 import logging
+
+def normalize_paradigm_name(paradigm_name):
+    """
+    Normalize the paradigm name to handle variations in naming conventions.
+    """
+    return paradigm_name.replace('_paradigm', '').replace('_', '').lower()
 
 def load_subject_data(subject_folder):
     """
     Load EEG and marker files for a given subject folder.
     """
-    eeg_files = [f for f in os.listdir(subject_folder) if 'eeg' in f]
-    marker_files = [f for f in os.listdir(subject_folder) if 'markers' in f]
+    eeg_files = sorted([f for f in os.listdir(subject_folder) if 'eeg' in f and f.endswith('.csv')])
+    marker_files = sorted([f for f in os.listdir(subject_folder) if 'markers' in f and f.endswith('.csv')])
 
     data = {}
 
@@ -19,27 +26,43 @@ def load_subject_data(subject_folder):
             # Load EEG data
             eeg_data = pd.read_csv(eeg_path)
 
-            # Load markers and check for required columns
+            # Load marker data and validate required columns
             markers = pd.read_csv(marker_path)
-
-            # Ensure the marker file has required columns: 'timestamp' and 'marker'
             if 'timestamp' not in markers.columns or 'marker' not in markers.columns:
-                logging.error(f"Missing required columns in markers file: {marker_file}")
-                continue  # Skip this file if columns are missing
+                logging.error(f"Missing required columns in marker file: {marker_file}")
+                continue
 
-            # Optionally, rename 'marker' to 'event' for consistency with the rest of the pipeline
+            # Rename 'marker' column to 'event' (optional)
             markers.rename(columns={'marker': 'event'}, inplace=True)
 
-            markers = markers[['timestamp', 'event']].values  # Keep only relevant columns
-            paradigm_name = eeg_file.split('_')[2]  # Assumes format: `Subject_1_paradigm_eeg.csv`
+            # Extract relevant columns
+            markers = markers[['timestamp', 'event']].values
 
-            data[paradigm_name] = {'eeg': eeg_data, 'markers': markers}
+            # Convert timestamps to match the EEG timestamps (assuming they are in seconds)
+            eeg_timestamps = eeg_data['timestamp'].values  # Assuming EEG data has a 'timestamp' column
+            aligned_markers = []
+
+            for marker in markers:
+                marker_time = marker[0]
+                # Find the closest EEG timestamp within a tolerance window (e.g., 0.1 seconds)
+                closest_idx = np.argmin(np.abs(eeg_timestamps - marker_time))
+                closest_time = eeg_timestamps[closest_idx]
+
+                if np.abs(closest_time - marker_time) <= 0.1:  # Tolerance window of 0.1 seconds
+                    aligned_markers.append([closest_time, marker[1]])
+
+            # Store EEG and marker data in the dictionary
+            raw_paradigm_name = '_'.join(eeg_file.split('_')[2:-1])
+            paradigm_name = normalize_paradigm_name(raw_paradigm_name)
+
+            data[paradigm_name] = {'eeg': eeg_data, 'markers': np.array(aligned_markers)}
 
         except Exception as e:
-            logging.error(f"Error loading files for {marker_file}: {e}")
-            continue  # Skip this file if there's any other error
+            logging.error(f"Error loading files for {eeg_file}: {e}")
+            continue
 
     return data
+
 
 def load_eeg_data(dataset_dir):
     """
@@ -50,23 +73,18 @@ def load_eeg_data(dataset_dir):
 
     Returns:
         dict: A nested dictionary containing data for all subjects.
-              Example structure:
-              {
-                  'Subject_1': {...},
-                  'Subject_2': {...},
-                  ...
-              }
     """
-    subject_folders = [os.path.join(dataset_dir, subj) for subj in os.listdir(dataset_dir)]
-    
     all_data = {}
+    subject_folders = [os.path.join(dataset_dir, subj) for subj in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, subj))]
+
     for subject_folder in subject_folders:
         subject_name = os.path.basename(subject_folder)
+        logging.info(f"Loading data for {subject_name}...")
+
         subject_data = load_subject_data(subject_folder)
-        
-        if subject_data:  # Only add valid data (not empty or None)
+        if subject_data:
             all_data[subject_name] = subject_data
         else:
-            logging.error(f"No valid data found for {subject_name}, skipping...")
+            logging.warning(f"No valid data found for {subject_name}, skipping...")
 
     return all_data

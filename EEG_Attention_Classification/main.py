@@ -2,7 +2,8 @@ import os
 import sys
 import numpy as np
 import logging
-from src.data_loader import load_eeg_data
+import pandas as pd
+from src.data_loader import load_eeg_data, normalize_paradigm_name
 from src.preprocessing import preprocess_eeg_data
 import src.feature_extraction
 import src.model_training
@@ -13,12 +14,21 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Paths
 DATA_DIR = "data/"
-MODEL_PATH = "models/random_forest_model.pkl"
+MODEL_PATH = "output/models/random_forest_model.pkl"
 
 # Parameters
 FS = 250  # Sampling frequency
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
+
+def load_available_paradigms(all_data, subject_name):
+    """
+    Get available paradigms for a given subject.
+    """
+    if subject_name in all_data:
+        return list(all_data[subject_name].keys())
+    else:
+        return []
 
 def main():
     """
@@ -29,68 +39,76 @@ def main():
         logging.info("Loading EEG data...")
         all_data = load_eeg_data(DATA_DIR)
 
-        # Example: Access data for a specific subject and paradigm
-        subject_name = 'Subject_1'  # Adjust as per your actual data
-        paradigm = 'oddball'  # Adjust based on paradigm available in your data
+        # Specify subject and paradigm
+        subject_name = 'Subject_1'  # Adjust as needed
+        available_paradigms = load_available_paradigms(all_data, subject_name)
 
-        # Ensure that the subject and paradigm exist in the data
-        if subject_name in all_data and paradigm in all_data[subject_name]:
-            eeg_data = all_data[subject_name][paradigm]['eeg']
-            labels = all_data[subject_name][paradigm]['markers']
+        if not available_paradigms:
+            logging.error(f"No paradigms available for {subject_name}. Exiting.")
+            return
 
-            logging.info(f"Loaded data for {subject_name} - {paradigm}")
-            logging.info(f"EEG data shape: {eeg_data.shape}")
-            logging.info(f"Labels shape: {labels.shape}")
+        paradigm = 'oddball'  # Adjust based on your data
+        normalized_paradigm = normalize_paradigm_name(paradigm)
 
-            # Step 2: Preprocess the data
-            logging.info("Preprocessing EEG data...")
-            preprocessed_data, _ = preprocess_eeg_data(eeg_data, labels, FS)
-            logging.info(f"Preprocessed data shape: {preprocessed_data.shape}")
+        if normalized_paradigm not in available_paradigms:
+            logging.warning(f"Paradigm '{paradigm}' not found for {subject_name}. Available paradigms: {available_paradigms}")
+            return
 
-            # Ensure that the number of samples in preprocessed data matches the labels
-            if preprocessed_data.shape[0] != len(labels):
-                logging.error(f"Mismatch between preprocessed data and labels. Data shape: {preprocessed_data.shape}, Labels shape: {len(labels)}")
-                return
+        eeg_data = all_data[subject_name][normalized_paradigm]['eeg']
+        labels = all_data[subject_name][normalized_paradigm]['markers']
 
-            # Step 3: Extract features
-            logging.info("Extracting features...")
-            features = src.feature_extraction.extract_features(preprocessed_data, FS)
-            logging.info(f"Feature matrix shape: {features.shape}")
+        if eeg_data.empty or labels.size == 0:
+            logging.error(f"No data found for paradigm {paradigm} in {subject_name}. Exiting.")
+            return
 
-            # Ensure features and labels are aligned
-            if features.shape[0] != len(labels):
-                logging.error(f"Mismatch between features and labels. Features shape: {features.shape}, Labels shape: {len(labels)}")
-                return
+        logging.info(f"Loaded data for {subject_name} - {paradigm}")
+        logging.info(f"EEG data shape: {eeg_data.shape}")
+        logging.info(f"Labels shape: {len(labels)}")
 
-            # Step 4: Train the model
-            logging.info("Training the model...")
-            results = src.model_training.train_model(features, labels, test_size=TEST_SIZE, random_state=RANDOM_STATE)
-            trained_model = results["model"]
-            logging.info(f"Model accuracy: {results['metrics']['accuracy']}")
+        # Step 2: Preprocess the data
+        logging.info("Preprocessing EEG data...")
+        preprocessed_data, labels = preprocess_eeg_data(eeg_data, labels, FS)
+        logging.info(f"Preprocessed data shape: {preprocessed_data.shape}")
 
-            # Step 5: Save the model
-            logging.info("Saving the trained model...")
-            src.model_training.save_model(trained_model, MODEL_PATH)
+        if preprocessed_data.shape[0] == 0 or len(labels) == 0:
+            logging.error("Preprocessed data or labels are empty. Exiting...")
+            return
 
-            # Step 6: Evaluate the model
-            logging.info("Evaluating the model...")
-            y_true = results["y_test"]
-            y_pred = results["y_pred"]
+        # Step 3: Extract features
+        logging.info("Extracting features...")
+        features = src.feature_extraction.extract_features(preprocessed_data, FS)
+        logging.info(f"Feature matrix shape: {features.shape}")
 
-            # Evaluate metrics and confusion matrix
-            src.evaluation.evaluate_model(y_true, y_pred)
+        if features.shape[0] == 0:
+            logging.error("Feature extraction returned empty features. Exiting...")
+            return
 
-            # Step 7: Visualize confusion matrix
-            logging.info("Plotting confusion matrix...")
-            class_names = [f"Class {i}" for i in np.unique(labels)]
-            src.evaluation.plot_confusion_matrix(y_true, y_pred, class_names=class_names)
+        # Step 4: Train the model
+        logging.info("Training the model...")
+        results = src.model_training.train_model(features, labels, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+        trained_model = results["model"]
+        logging.info(f"Model accuracy: {results['metrics']['accuracy']}")
 
-        else:
-            logging.error(f"Subject '{subject_name}' or paradigm '{paradigm}' not found in the data.")
+        # Step 5: Save the model
+        logging.info("Saving the trained model...")
+        src.model_training.save_model(trained_model, MODEL_PATH)
+
+        # Step 6: Evaluate the model
+        logging.info("Evaluating the model...")
+        y_true = results["y_test"]
+        y_pred = results["y_pred"]
+
+        src.evaluation.evaluate_model(y_true, y_pred)
+
+        # Step 7: Visualize confusion matrix
+        logging.info("Plotting confusion matrix...")
+        class_names = [f"Class {i}" for i in np.unique(labels)]
+        src.evaluation.plot_confusion_matrix(y_true, y_pred, class_names=class_names)
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         raise
+
 
 if __name__ == "__main__":
     main()
