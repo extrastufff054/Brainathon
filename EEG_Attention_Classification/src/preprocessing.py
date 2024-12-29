@@ -2,8 +2,6 @@ import logging
 import numpy as np
 from scipy.signal import butter, filtfilt
 
-logging.basicConfig(level=logging.INFO)
-
 def bandpass_filter(data, lowcut, highcut, fs, order=4):
     """
     Apply a bandpass filter to EEG data.
@@ -22,7 +20,7 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     low = lowcut / nyquist
     high = highcut / nyquist
     b, a = butter(order, [low, high], btype='band')
-    return filtfilt(b, a, data, axis=1)  # Ensure filtering is applied along the sample axis
+    return filtfilt(b, a, data, axis=0)
 
 def segment_epochs(eeg_data, markers, fs, epoch_length=1):
     """
@@ -40,20 +38,35 @@ def segment_epochs(eeg_data, markers, fs, epoch_length=1):
             - labels: List of corresponding event labels.
     """
     epoch_samples = int(epoch_length * fs)
-    max_samples = eeg_data.shape[1]
     epochs = []
     labels = []
 
-    for marker_time, event in markers:
-        start_idx = int(marker_time * fs)
+    # Get the max timestamp based on the length of the EEG data (in samples)
+    max_samples = eeg_data.shape[1]  # Number of samples in EEG data
+
+    # Ensure markers is a 2D ndarray with two columns [timestamp, event]
+    if markers.ndim != 2 or markers.shape[1] != 2:
+        raise ValueError("Markers should be a 2D ndarray with two columns: [timestamp, event]")
+    
+    logging.info(f"Total markers: {markers.shape[0]}")  # Debugging: print marker count
+
+    for marker in markers:
+        timestamp = int(marker[0])  # Timestamp (in seconds)
+        event = marker[1]           # Event type
+
+        # Calculate start and end indices for the epoch
+        start_idx = int(timestamp * fs)  # Convert timestamp to sample index
         end_idx = start_idx + epoch_samples
 
-        if start_idx >= 0 and end_idx <= max_samples:
-            epochs.append(eeg_data[:, start_idx:end_idx])
+        # Ensure the epoch doesn't exceed the data length
+        if start_idx < max_samples and end_idx <= max_samples:
+            epochs.append(eeg_data[:, start_idx:end_idx])  # Extract the epoch data
             labels.append(event)
         else:
-            logging.warning(f"Skipping marker at {marker_time} (epoch out of bounds).")
-
+            # Skip invalid markers where the epoch exceeds the data length
+            logging.warning(f"Skipping marker at timestamp {timestamp} (epoch out of bounds).")
+    
+    logging.info(f"Total epochs created: {len(epochs)}")  # Debugging: print number of epochs
     return np.array(epochs), np.array(labels)
 
 def preprocess_eeg_data(eeg_data, labels, fs, epoch_length=1.0, overlap=0.5):
@@ -86,31 +99,25 @@ def preprocess_eeg_data(eeg_data, labels, fs, epoch_length=1.0, overlap=0.5):
         raise ValueError("Markers should be a 2D ndarray with two columns: [timestamp, label]")
 
     for marker in labels:
-        try:
-            # Extract the timestamp of the marker (assuming it is in seconds)
-            marker_time = float(marker[0])  # Ensure the timestamp is a float
-            marker_label = marker[1]       # Event label
+        # Extract the timestamp of the marker (assuming it is in seconds)
+        marker_time = marker[0]  # Assuming marker format is [timestamp, label]
 
-            # Convert timestamp to sample index
-            marker_time_samples = int(marker_time * fs)
+        # Convert timestamp to sample index
+        marker_time_samples = int(marker_time * fs)
 
-            # Define the start and end time for the epoch
-            epoch_start = marker_time_samples - int(epoch_samples / 2)
-            epoch_end = epoch_start + epoch_samples
+        # Define the start and end time for the epoch
+        epoch_start = marker_time_samples - int(epoch_samples / 2)
+        epoch_end = epoch_start + epoch_samples
 
-            # Check if the epoch is within the bounds of the EEG data
-            if epoch_start >= 0 and epoch_end <= eeg_data.shape[1]:  # Check against number of samples (not channels)
-                # Extract the epoch data
-                epoch_data = eeg_data[:, epoch_start:epoch_end]
-                epochs.append(epoch_data)
-                valid_labels.append(marker_label)
-                logging.debug(f"Epoch created for marker at {marker_time}s")
-            else:
-                # Skip invalid markers where the epoch exceeds the data length
-                logging.warning(f"Skipping marker at timestamp {marker_time} (epoch out of bounds).")
-        except ValueError as e:
-            logging.error(f"Invalid marker data encountered: {marker}. Error: {e}")
-            continue
+        # Check if the epoch is within the bounds of the EEG data
+        if epoch_start >= 0 and epoch_end <= eeg_data.shape[1]:  # Check against number of samples (not channels)
+            # Extract the epoch data
+            epoch_data = eeg_data[:, epoch_start:epoch_end]
+            epochs.append(epoch_data)
+            valid_labels.append(marker[1])  # Assuming marker[1] is the label
+            logging.debug(f"Epoch created for marker at {marker_time}s")
+        else:
+            logging.warning(f"Skipping marker at timestamp {marker_time} (epoch out of bounds).")
 
     logging.info(f"Total epochs created: {len(epochs)}")
 
@@ -131,4 +138,3 @@ def preprocess_eeg_data(eeg_data, labels, fs, epoch_length=1.0, overlap=0.5):
     logging.info(f"Labels shape: {valid_labels.shape}")
 
     return epochs, valid_labels
-
