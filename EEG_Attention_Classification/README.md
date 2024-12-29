@@ -1,3 +1,5 @@
+# This is a README.md
+
 ## File Structure
 
 ```
@@ -29,7 +31,7 @@ EEG_Attention_Classification/
 ├── README.md                 # Project description and instructions
 ```
 
-Docker setup and execution 
+## Docker setup and execution 
 
 
 ```
@@ -40,3 +42,6 @@ docker build -t eeg-project .
 docker run --rm -it -v "${PWD}/data:/app/data" eeg-project
 ```
 
+This is a debug statement for this damn README.md
+
+Why is it not updating
