@@ -1,0 +1,30 @@
+import os
+import sys
+import numpy as np
+import logging
+from src.data_loader import load_eeg_data
+from src.preprocessing import preprocess_eeg_data
+import src.feature_extraction 
+import src.model_training 
+import src.evaluation 
+
+
+
+
+
+
+
+Subject_1_baseline_eyesclosed_eeg.csv
+Subject_1_baseline_eyesclosed_markers.csv
+Subject_1_baseline_eyesopen_eeg.csv	
+Subject_1_baseline_eyesopen_markers.csv
+Subject_1_dual-task_paradigm_eeg.csv
+Subject_1_dual-task_paradigm_markers.csv
+Subject_1_oddball_paradigm_eeg.csv
+Subject_1_oddball_paradigm_markers.csv
+Subject_1_stroop_task_eeg.csv
+Subject_1_stroop_task_markers.csv
+Subject_1_task-switching_paradigm_eeg.csv
+Subject_1_task-switching_paradigm_markers.csv
+
+C:\Users\Sarang\Downloads\Brainathon\EEG_Attention_Classification\data\Subject_1\Subject_1_baseline_eyesclosed_eeg.csv
