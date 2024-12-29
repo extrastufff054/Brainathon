@@ -28,3 +28,12 @@ EEG_Attention_Classification/
 ├── requirements.txt          # Python dependencies
 ├── README.md                 # Project description and instructions
 ```
+
+
+```
+docker build -t eeg-project .
+```
+
+```
+docker run --rm -it -v $(pwd)/data:/app/data eeg-project
+```
