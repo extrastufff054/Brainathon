@@ -35,5 +35,5 @@ docker build -t eeg-project .
 ```
 
 ```
-docker run --rm -it -v $(pwd)/data:/app/data eeg-project
+docker run --rm -it -v "${PWD}/data:/app/data" eeg-project
 ```
