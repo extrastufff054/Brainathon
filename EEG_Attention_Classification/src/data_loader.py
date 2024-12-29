@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 def normalize_paradigm_name(paradigm_name):
     """
     Normalize the paradigm name to handle variations in naming conventions.
@@ -26,35 +28,30 @@ def load_subject_data(subject_folder):
             # Load EEG data
             eeg_data = pd.read_csv(eeg_path)
 
+            # Validate presence of timestamp column in EEG data
+            if 'timestamp' not in eeg_data.columns:
+                logging.error(f"Missing 'timestamp' column in EEG file: {eeg_file}")
+                continue
+
             # Load marker data and validate required columns
             markers = pd.read_csv(marker_path)
             if 'timestamp' not in markers.columns or 'marker' not in markers.columns:
                 logging.error(f"Missing required columns in marker file: {marker_file}")
                 continue
 
-            # Rename 'marker' column to 'event' (optional)
-            markers.rename(columns={'marker': 'event'}, inplace=True)
+            # Align markers to EEG timestamps within a tolerance window
+            eeg_timestamps = eeg_data['timestamp'].values
+            aligned_markers = [
+                [eeg_timestamps[np.argmin(np.abs(eeg_timestamps - marker[0]))], marker[1]]
+                for marker in markers[['timestamp', 'marker']].values
+                if np.abs(eeg_timestamps[np.argmin(np.abs(eeg_timestamps - marker[0]))] - marker[0]) <= 0.1
+            ]
 
-            # Extract relevant columns
-            markers = markers[['timestamp', 'event']].values
-
-            # Convert timestamps to match the EEG timestamps (assuming they are in seconds)
-            eeg_timestamps = eeg_data['timestamp'].values  # Assuming EEG data has a 'timestamp' column
-            aligned_markers = []
-
-            for marker in markers:
-                marker_time = marker[0]
-                # Find the closest EEG timestamp within a tolerance window (e.g., 0.1 seconds)
-                closest_idx = np.argmin(np.abs(eeg_timestamps - marker_time))
-                closest_time = eeg_timestamps[closest_idx]
-
-                if np.abs(closest_time - marker_time) <= 0.1:  # Tolerance window of 0.1 seconds
-                    aligned_markers.append([closest_time, marker[1]])
-
-            # Store EEG and marker data in the dictionary
+            # Normalize the paradigm name from the EEG file name
             raw_paradigm_name = '_'.join(eeg_file.split('_')[2:-1])
             paradigm_name = normalize_paradigm_name(raw_paradigm_name)
 
+            # Store EEG and aligned markers in the dictionary
             data[paradigm_name] = {'eeg': eeg_data, 'markers': np.array(aligned_markers)}
 
         except Exception as e:
@@ -62,7 +59,6 @@ def load_subject_data(subject_folder):
             continue
 
     return data
-
 
 def load_eeg_data(dataset_dir):
     """
