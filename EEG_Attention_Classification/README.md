@@ -42,3 +42,7 @@ docker build -t eeg-project .
 docker run --rm -it -v "${PWD}/data:/app/data" eeg-project
 ```
 
+Allows auto sync -> Use this if making changes
+```
+docker run --rm -it -v "$(pwd):/app" -v "$(pwd)/data:/app/data" eeg-project
+```
