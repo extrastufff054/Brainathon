@@ -29,6 +29,8 @@ EEG_Attention_Classification/
 ├── README.md                 # Project description and instructions
 ```
 
+Docker setup and execution 
+
 
 ```
 docker build -t eeg-project .
@@ -37,3 +39,4 @@ docker build -t eeg-project .
 ```
 docker run --rm -it -v "${PWD}/data:/app/data" eeg-project
 ```
+
