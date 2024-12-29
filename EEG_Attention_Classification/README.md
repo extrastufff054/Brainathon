@@ -42,6 +42,3 @@ docker build -t eeg-project .
 docker run --rm -it -v "${PWD}/data:/app/data" eeg-project
 ```
 
-This is a debug statement for this damn README.md
-
-Why is it not updating
